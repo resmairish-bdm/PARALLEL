@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PARALLEL — Household Duplicate Detection System</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f5f4f0; --surface: #ffffff; --surface2: #f0eeea;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --text: #1a1a18; --muted: #6b6a65; --hint: #9c9a94;
+    --blue: #185fa5; --blue-bg: #e6f1fb; --blue-text: #0c447c;
+    --red: #a32d2d; --red-bg: #fcebeb; --red-text: #791f1f; --red-border: #f09595;
+    --green: #3b6d11; --green-bg: #eaf3de; --green-text: #27500a;
+    --amber-bg: #faeeda; --amber-text: #854f0b;
+    --radius: 10px; --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+  
+  header { background: #1a2438; border-bottom: 1px solid rgba(255,255,255,0.07); padding: 13px 20px; display: flex; align-items: center; gap: 14px; position: sticky; top: 0; z-index: 100; }
+  header .logo { width: 36px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  header h1 { font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: 0.18em; text-transform: uppercase; line-height: 1.1; }
+  header .sub { font-size: 10px; color: #7a9cc0; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; margin-top: 2px; }
+  header .stats-pill { margin-left: auto; background: rgba(79,142,247,0.15); color: #7aabff; border: 1px solid rgba(79,142,247,0.25); font-size: 11px; font-weight: 500; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px; }
+
+  .search-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .search-label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px; }
+  .search-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+  .hh-inputs { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+  .hh-input-wrap { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px; }
+  .hh-input-wrap label { font-size: 11px; color: var(--muted); }
+  input[type=text] { width: 100%; padding: 8px 12px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; background: var(--surface2); color: var(--text); outline: none; transition: border-color 0.15s; }
+  input[type=text]:focus { border-color: var(--blue); background: #fff; }
+  input[type=text]::placeholder { color: var(--hint); }
+  .btn-search { padding: 9px 20px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: opacity 0.15s; }
+  .btn-search:hover { opacity: 0.88; }
+  .btn-clear { padding: 9px 14px; background: var(--surface2); color: var(--muted); border: 0.5px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; }
+  .btn-clear:hover { background: var(--border); }
+
+  .hint-text { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .hint-text code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-size: 11px; font-family: monospace; }
+
+  .loading { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .alert { padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 16px; font-size: 13px; display: flex; align-items: flex-start; gap: 8px; }
+  .alert-dup { background: var(--red-bg); border: 0.5px solid var(--red-border); color: var(--red-text); }
+  .alert-ok  { background: var(--green-bg); color: var(--green-text); }
+  .alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .alert strong { font-weight: 600; }
+
+  .results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  
+  .hh-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .hh-card.has-dup { border-color: var(--red-border); }
+  .hh-card-header { padding: 12px 16px; background: var(--surface2); border-bottom: 0.5px solid var(--border); }
+  .hh-card.has-dup .hh-card-header { background: var(--red-bg); }
+  .hh-id { font-size: 11px; font-weight: 700; color: var(--blue-text); letter-spacing: 0.04em; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .hh-id .dup-badge { background: var(--red-bg); color: var(--red); border: 0.5px solid var(--red-border); font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600; }
+  .hh-meta { font-size: 12px; color: var(--muted); }
+  .hh-meta strong { color: var(--text); font-weight: 500; }
+  .hh-meta-row { display: flex; gap: 6px; margin-bottom: 2px; flex-wrap: wrap; }
+  .meta-pill { background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px; padding: 1px 8px; font-size: 11px; color: var(--muted); }
+  .meta-pill.active { background: var(--green-bg); color: var(--green-text); }
+
+  .members-table-wrap { overflow-x: auto; }
+  .members-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .members-table th { background: var(--surface2); color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 7px 10px; text-align: left; border-bottom: 0.5px solid var(--border); white-space: nowrap; }
+  .members-table td { padding: 7px 10px; border-bottom: 0.5px solid var(--border); vertical-align: top; }
+  .members-table tr:last-child td { border-bottom: none; }
+  .members-table tr.is-dup { background: var(--red-bg); }
+  .members-table tr.is-dup td { color: var(--red-text); }
+  .members-table tr.is-dup .name-cell { font-weight: 600; }
+  .name-cell { font-weight: 500; color: var(--text); }
+  .dup-flag { display: inline-block; font-size: 9px; background: var(--red); color: #fff; padding: 1px 5px; border-radius: 8px; margin-left: 4px; vertical-align: middle; }
+  .grantee-flag { display: inline-block; font-size: 9px; background: var(--blue); color: #fff; padding: 1px 5px; border-radius: 8px; margin-left: 4px; vertical-align: middle; }
+  .no-val { color: var(--hint); }
+  .sex-m { color: var(--blue-text); }
+  .sex-f { color: #7a3b6e; }
+
+  .no-results { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .no-results .icon { font-size: 32px; margin-bottom: 8px; }
+  .no-results p { font-size: 13px; }
+
+  .summary-bar { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 18px; margin-bottom: 16px; display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+  .sum-item { display: flex; align-items: center; gap: 6px; }
+  .sum-num { font-size: 18px; font-weight: 700; color: var(--text); }
+  .sum-num.red { color: var(--red); }
+  .sum-label { font-size: 11px; color: var(--muted); line-height: 1.2; }
+
+  .section-header { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin: 20px 0 10px; }
+
+  #not-found-list { display: flex; flex-direction: column; gap: 6px; }
+  .not-found-item { background: var(--amber-bg); color: var(--amber-text); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 13px; }
+
+  footer { text-align: center; padding: 24px; color: var(--hint); font-size: 11px; margin-top: 20px; }
+  
+  @media (max-width: 600px) {
+    .hh-inputs { flex-direction: column; }
+    .hh-input-wrap { min-width: 100%; }
+    .results-grid { grid-template-columns: 1fr; }
+    .summary-bar { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Blue column: 3 dots -->
+      <circle cx="11" cy="10" r="3.2" fill="#3b9eff"/>
+      <circle cx="11" cy="18" r="3.2" fill="#3b9eff"/>
+      <circle cx="11" cy="26" r="3.2" fill="#3b9eff"/>
+      <!-- Orange column: 3 dots -->
+      <circle cx="21" cy="10" r="3.2" fill="#ff6b2b"/>
+      <circle cx="21" cy="18" r="3.2" fill="#ff6b2b" opacity="0.55"/>
+      <circle cx="21" cy="26" r="3.2" fill="#ff6b2b" opacity="0.25"/>
+    </svg>
+  </div>
+  <div>
+    <h1>PARALLEL</h1>
+    <div class="sub">Household Duplicate Detection System</div>
+  </div>
+  <div class="stats-pill" id="stats-pill">Loading data…</div>
+</header>
+
+<main>
+  <div class="search-card">
+    <div class="search-label">Search Households</div>
+    <div class="search-row">
+      <div class="hh-inputs">
+        <div class="hh-input-wrap">
+          <label>HH ID 1 *</label>
+          <input type="text" id="hh1" placeholder="e.g. 035416004-4990-00001" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="hh-input-wrap">
+          <label>HH ID 2</label>
+          <input type="text" id="hh2" placeholder="optional" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="hh-input-wrap">
+          <label>HH ID 3</label>
+          <input type="text" id="hh3" placeholder="optional" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="hh-input-wrap">
+          <label>HH ID 4</label>
+          <input type="text" id="hh4" placeholder="optional" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <button class="btn-search" onclick="doSearch()">🔍 Compare</button>
+      <button class="btn-clear" onclick="clearAll()">Clear</button>
+    </div>
+    <p class="hint-text">
+      Try demo: 
+      <code onclick="loadDemo()" style="cursor:pointer;color:var(--blue-text)">Click to load duplicate example ↗</code>
+    </p>
+  </div>
+
+  <div id="results"></div>
+</main>
+
+<footer>
+  Data: SDN Roster April 30, 2026 &nbsp;·&nbsp; Read-only view &nbsp;·&nbsp; <span id="footer-count"></span>
+</footer>
+
+<script src="roster.js"></script>
+<script>
+let HH = null;
+let DUP = null;
+
+function init() {
+  if (typeof window.HH_DATA === 'undefined') {
+    document.getElementById('stats-pill').textContent = '⚠ hh_data.js not loaded';
+    document.getElementById('results').innerHTML = `
+      <div class="no-results">
+        <div class="icon">⚠️</div>
+        <p><strong>Data file not found.</strong><br>Make sure <code>hh_data.js</code> is in the same folder as this HTML file.</p>
+      </div>`;
+    return;
+  }
+  HH = window.HH_DATA;
+  DUP = window.DUP_INDEX || {};
+  const hhCount = Object.keys(HH).length;
+  let totalMembers = 0;
+  for (const k in HH) totalMembers += HH[k].m.length;
+  document.getElementById('stats-pill').textContent = `${hhCount.toLocaleString()} HHs · ${totalMembers.toLocaleString()} members`;
+  document.getElementById('footer-count').textContent = `${hhCount.toLocaleString()} households · ${totalMembers.toLocaleString()} members`;
+}
+
+function loadDemo() {
+  document.getElementById('hh1').value = '1600001531306';
+  document.getElementById('hh2').value = '166701004-0765-00004';
+  document.getElementById('hh3').value = '1600001531740';
+  document.getElementById('hh4').value = '166701003-0139-00008';
+  doSearch();
+}
+
+function clearAll() {
+  ['hh1','hh2','hh3','hh4'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('results').innerHTML = '';
+}
+
+function isDup(hh_id, memberName) {
+  if (!DUP[hh_id]) return false;
+  return DUP[hh_id].some(n => n.toUpperCase() === memberName.trim().toUpperCase());
+}
+
+function fmtDate(d) {
+  if (!d) return '<span class="no-val">—</span>';
+  const parts = d.split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return d;
+}
+
+function fmtVal(v) {
+  if (!v || v === '' || v === 'NO' || v === 'No') return '<span class="no-val">No</span>';
+  if (v === 'YES' || v === 'Yes') return '<span style="color:var(--green-text);font-weight:500">Yes</span>';
+  return v;
+}
+
+function statusShort(s) {
+  if (!s) return '';
+  return s.replace(/^\d+ - /, '');
+}
+
+function renderHHCard(hh_id, data, searchedIds) {
+  const hasDupMember = data.m.some(m => isDup(hh_id, m.nm));
+  
+  // Find duplicate cross-references
+  let dupCrossRef = [];
+  if (hasDupMember) {
+    data.m.forEach(m => {
+      if (isDup(hh_id, m.nm)) {
+        // Find which other searched HHs this member appears in
+        searchedIds.forEach(oid => {
+          if (oid !== hh_id && HH[oid]) {
+            const found = HH[oid].m.find(om => om.nm.trim().toUpperCase() === m.nm.trim().toUpperCase());
+            if (found) dupCrossRef.push({ name: m.nm, inHH: oid });
+          }
+        });
+      }
+    });
+  }
+
+  const memberRows = data.m.map((m, idx) => {
+    const memberIsDup = isDup(hh_id, m.nm);
+    const isGrantee = m.gr === 'YES';
+    return `
+      <tr class="${memberIsDup ? 'is-dup' : ''}">
+        <td>${idx + 1}</td>
+        <td>${m.n || '<span class="no-val">—</span>'}</td>
+        <td class="name-cell">
+          ${m.nm || '<span class="no-val">—</span>'}
+          ${memberIsDup ? '<span class="dup-flag">DUP</span>' : ''}
+          ${isGrantee ? '<span class="grantee-flag">GRANTEE</span>' : ''}
+        </td>
+        <td>${m.r || '<span class="no-val">—</span>'}</td>
+        <td>${statusShort(m.ms) || '<span class="no-val">—</span>'}</td>
+        <td class="${m.sx === 'MALE' ? 'sex-m' : 'sex-f'}">${m.sx || '—'}</td>
+        <td>${m.ag !== '' && m.ag !== null ? m.ag : '<span class="no-val">—</span>'}</td>
+        <td>${fmtDate(m.bd)}</td>
+        <td>${fmtVal(m.sc)}</td>
+        <td>${fmtVal(m.em)}</td>
+        <td>${m.pw || '<span class="no-val">—</span>'}</td>
+      </tr>`;
+  }).join('');
+
+  let crossRefHtml = '';
+  if (dupCrossRef.length > 0) {
+    const unique = [...new Set(dupCrossRef.map(d => `<strong>${d.name}</strong> also in ${d.inHH}`))];
+    crossRefHtml = `<div class="alert alert-dup" style="margin:0;border-radius:0;border:none;border-bottom:0.5px solid var(--red-border)">
+      <span class="alert-icon">⚠️</span>
+      <div><strong>Duplicate found:</strong> ${unique.join(' · ')}</div>
+    </div>`;
+  }
+
+  return `
+    <div class="hh-card ${hasDupMember ? 'has-dup' : ''}">
+      <div class="hh-card-header">
+        <div class="hh-id">
+          🏠 ${hh_id}
+          ${hasDupMember ? '<span class="dup-badge">⚠ DUPLICATE</span>' : ''}
+        </div>
+        <div class="hh-meta">
+          <div class="hh-meta-row" style="margin-bottom:4px">
+            <strong>Grantee:</strong> ${data.g || '<span class="no-val">—</span>'}
+          </div>
+          <div class="hh-meta-row" style="margin-bottom:4px">
+            <strong>Address:</strong> ${data.a || '<span class="no-val">—</span>'}
+          </div>
+          <div class="hh-meta-row">
+            <span class="meta-pill ${data.c && data.c.includes('Active') ? 'active' : ''}">${statusShort(data.c) || '—'}</span>
+            <span class="meta-pill">Set/Group: ${data.s || '—'}</span>
+            <span class="meta-pill">${data.m.length} member${data.m.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+      </div>
+      ${crossRefHtml}
+      <div class="members-table-wrap">
+        <table class="members-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Entry ID</th>
+              <th>Name</th>
+              <th>Relation</th>
+              <th>Status</th>
+              <th>Sex</th>
+              <th>Age</th>
+              <th>Birthday</th>
+              <th>School</th>
+              <th>Educ Mon.</th>
+              <th>PWD</th>
+            </tr>
+          </thead>
+          <tbody>${memberRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function doSearch() {
+  if (!HH) {
+    alert('Data not loaded yet. Please wait.');
+    return;
+  }
+  const inputs = ['hh1','hh2','hh3','hh4']
+    .map(id => document.getElementById(id).value.trim())
+    .filter(v => v !== '');
+
+  if (inputs.length === 0) {
+    document.getElementById('results').innerHTML = `<div class="no-results"><div class="icon">🔍</div><p>Enter at least one HH ID to search.</p></div>`;
+    return;
+  }
+
+  const found = [];
+  const notFound = [];
+
+  inputs.forEach(id => {
+    if (HH[id]) found.push(id);
+    else notFound.push(id);
+  });
+
+  if (found.length === 0) {
+    document.getElementById('results').innerHTML = `<div class="no-results"><div class="icon">❌</div><p>No households found for the entered IDs. Check the IDs and try again.</p></div>`;
+    return;
+  }
+
+  // Count total dups across the searched HHs
+  let totalDupMembers = 0;
+  let dupPairs = new Set();
+  found.forEach(hh_id => {
+    HH[hh_id].m.forEach(m => {
+      if (isDup(hh_id, m.nm)) {
+        totalDupMembers++;
+        found.forEach(oid => {
+          if (oid !== hh_id && HH[oid]) {
+            const match = HH[oid].m.find(om => om.nm.trim().toUpperCase() === m.nm.trim().toUpperCase());
+            if (match) dupPairs.add([hh_id, oid].sort().join('|'));
+          }
+        });
+      }
+    });
+  });
+
+  // Cross-check duplicates only within the searched HHs
+  let crossDupCount = 0;
+  found.forEach(hh_id => {
+    HH[hh_id].m.forEach(m => {
+      found.forEach(oid => {
+        if (oid !== hh_id) {
+          const match = HH[oid].m.find(om => om.nm.trim().toUpperCase() === m.nm.trim().toUpperCase());
+          if (match) crossDupCount++;
+        }
+      });
+    });
+  });
+  crossDupCount = crossDupCount / 2; // each pair counted twice
+
+  // Summary
+  let summaryHtml = `
+    <div class="summary-bar">
+      <div class="sum-item">
+        <div>
+          <div class="sum-num">${found.length}</div>
+          <div class="sum-label">HH${found.length !== 1 ? 's' : ''} found</div>
+        </div>
+      </div>
+      <div class="sum-item">
+        <div>
+          <div class="sum-num">${found.reduce((a, id) => a + HH[id].m.length, 0)}</div>
+          <div class="sum-label">Total members</div>
+        </div>
+      </div>
+      <div class="sum-item">
+        <div>
+          <div class="sum-num ${crossDupCount > 0 ? 'red' : ''}">${Math.round(crossDupCount)}</div>
+          <div class="sum-label">Duplicate member${crossDupCount !== 1 ? 's' : ''} across these HHs</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Alert banner
+  let alertHtml = '';
+  if (crossDupCount > 0) {
+    let dupNames = [];
+    found.forEach(hh_id => {
+      HH[hh_id].m.forEach(m => {
+        found.forEach(oid => {
+          if (oid !== hh_id) {
+            const match = HH[oid].m.find(om => om.nm.trim().toUpperCase() === m.nm.trim().toUpperCase());
+            if (match && !dupNames.includes(m.nm)) dupNames.push(m.nm);
+          }
+        });
+      });
+    });
+    alertHtml = `<div class="alert alert-dup">
+      <span class="alert-icon">⚠️</span>
+      <div><strong>${Math.round(crossDupCount)} duplicate member(s) detected across selected households:</strong> ${dupNames.join(' · ')}<br>
+      <span style="font-size:11px;opacity:0.8">Highlighted in red below. Cross-check with field staff before flagging.</span></div>
+    </div>`;
+  } else {
+    alertHtml = `<div class="alert alert-ok">
+      <span class="alert-icon">✅</span>
+      <strong>No duplicates found</strong> among the selected households.
+    </div>`;
+  }
+
+  // HH Cards
+  const cardsHtml = `<div class="results-grid">${found.map(id => renderHHCard(id, HH[id], found)).join('')}</div>`;
+
+  // Not found
+  let notFoundHtml = '';
+  if (notFound.length > 0) {
+    notFoundHtml = `<div class="section-header">Not found</div>
+      <div id="not-found-list">${notFound.map(id => `<div class="not-found-item">⚠ HH ID not found: <strong>${id}</strong></div>`).join('')}</div>`;
+  }
+
+  document.getElementById('results').innerHTML = summaryHtml + alertHtml + cardsHtml + notFoundHtml;
+}
+
+// Allow Enter key to trigger search
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+
+// Init on load
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
